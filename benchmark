@@ -1,0 +1,25 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+# see /proc/stat in proc(5)
+# user nice system idle iowait irq softirq steal guest guest_nice
+declare -a last_cpu_stats=( 0 0 0 0 0 0 0 0 0 0 )
+declare -a cpu_usage=( 0 0 0 0 0 0 0 0 0 0 )
+
+function gather_cpu_usage () {
+  local cpu_stats=( $(read head numbers < /proc/stat; echo "$numbers") )
+  local i
+  for i in ${!cpu_usage[@]}; do
+    cpu_usage[$i]=$((cpu_stats[$i] - last_cpu_stats[$i]))
+  done
+  
+  last_cpu_stats=( ${cpu_stats[@]} )
+}
+
+gather_cpu_usage
+sleep 2
+echo "${cpu_usage[@]}"
+gather_cpu_usage
+echo "${last_cpu_stats[@]}"
+
+echo "${cpu_usage[@]}"
