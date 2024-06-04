@@ -1,8 +1,16 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# see /proc/stat in proc(5)
-# user nice system idle iowait irq softirq steal guest guest_nice
+if [ "$EUID" != "0" ]; then
+  echo "This script must be run as root!"
+  exit 1
+fi
+
+declare -r ZFS_POOL_NAME=test
+declare -r -a ZFS_DEVICES=( "/dev/disk/by-id/nvme-SAMSUNG_MZPLJ6T4HALA-00007_S55KNG0R100367" "/dev/disk/by-id/nvme-SAMSUNG_MZPLJ6T4HALA-00AMV_S5XENE0N808577" "/dev/disk/by-id/nvme-SAMSUNG_MZPLJ6T4HALA-00007_S55KNG0R100244" )
+
+# Data gathered from /proc/stat. See proc(5) for the meaning of those variables.
+# From left to right: user nice system idle iowait irq softirq steal guest guest_nice
 declare -a last_cpu_stats=( 0 0 0 0 0 0 0 0 0 0 )
 declare -a cpu_usage=( 0 0 0 0 0 0 0 0 0 0 )
 
@@ -16,10 +24,22 @@ function gather_cpu_usage () {
   last_cpu_stats=( ${cpu_stats[@]} )
 }
 
-gather_cpu_usage
-sleep 2
-echo "${cpu_usage[@]}"
-gather_cpu_usage
-echo "${last_cpu_stats[@]}"
+function destroy_zfs_pool () {
+  echo "Destroying ZFS pool $ZFS_POOL_NAME..."
+  zpool destroy -f "$ZFS_POOL_NAME"
 
-echo "${cpu_usage[@]}"
+  for device in "${ZFS_DEVICES[@]}"; do
+    device="$(readlink -f "$device")"
+    echo "Cleaning up device $device..."
+    wipefs -af "${device}p1"
+    wipefs -af "${device}p9"
+    echo -e "g\nw\n" | fdisk "$device"
+  done
+}
+
+destroy_zfs_pool
+
+#gather_cpu_usage
+#sleep 2
+#gather_cpu_usage
+#echo "${cpu_usage[@]}"
